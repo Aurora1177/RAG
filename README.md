@@ -8,7 +8,17 @@ A **retrieval-augmented generation (RAG)** service built with **FastAPI**. It in
 - **Ingestion**: Three-level chunking, parent chunks in SQLite, leaf chunks embedded and written to the active vector backend.
 - **RAG flow**: **LangGraph**-based graph (retrieve → grade → optional query rewrite / expanded retrieval) plus an OpenAI-compatible chat step for answers (e.g. Alibaba **DashScope** / Qwen).
 - **API**: REST endpoints for ingest, document list/delete, `/rag/complete`, and `/health`.
-- **UI**: Vanilla JS frontend served from the backend; open `**http://127.0.0.1:8001`** (not `file://`).
+- **UI**: Vanilla JS frontend served from the backend; open `http://127.0.0.1:8001` (not `file://`).
+
+## Screenshots
+
+| Main UI | Upload |
+|--------|--------|
+| ![Main UI](images/主界面.jpg) | ![Upload](images/上传.jpg) |
+
+| Upload done | Q&A chat |
+|-------------|----------|
+| ![Upload success](images/上传成功.jpg) | ![Q&A](images/问答.jpg) |
 
 ## Requirements
 
@@ -27,7 +37,7 @@ pip install -e .
 python serve.py
 ```
 
-Open `**http://127.0.0.1:8001**`. Default port is **8001** (`PORT` env overrides).
+Open `http://127.0.0.1:8001`. Default port is **8001** (`PORT` env overrides).
 
 ### Optional: uv
 
@@ -52,7 +62,7 @@ python serve.py
 | `EMBEDDING_MODEL`       | Dense embedding model (e.g. `BAAI/bge-m3`)               |
 
 
-Copy `**.env.example**` to `**.env**` and fill in secrets. Do not commit `.env`.
+Copy `.env.example` to `.env` and fill in secrets. Do not commit `.env`.
 
 ## Project layout
 
@@ -82,7 +92,7 @@ rag_new/
 
 ## Troubleshooting
 
-- `**Failed to fetch` in the browser**: Start the server and open the app at `**http://127.0.0.1:8001`**. Do not open `index.html` via `file://`.
+- **Failed to fetch** in the browser: Start the server and open the app at `http://127.0.0.1:8001`. Do not open `index.html` via `file://`.
 - **First ingest is slow**: Embedding model download and CPU encoding can take minutes.
 - **DashScope 400s** (e.g. `enable_thinking`, `json` in messages): The backend sets parameters required by the compatible API for non-streaming and structured calls; use a model enabled in your cloud console.
 
