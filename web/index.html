@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>rag_new — RAG</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #1a2332;
+      --border: #2d3a4d;
+      --text: #e7edf4;
+      --muted: #8b9cb3;
+      --accent: #3d8bfd;
+      --ok: #3ecf8e;
+      --warn: #f0b429;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .wrap { max-width: 900px; margin: 0 auto; padding: 1.5rem; }
+    h1 { font-size: 1.35rem; font-weight: 600; margin: 0 0 0.25rem; }
+    .sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.25rem; }
+    .row { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; margin-bottom: 1rem; }
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 0.55rem 1rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.secondary { background: var(--panel); color: var(--text); border: 1px solid var(--border); }
+    textarea {
+      width: 100%;
+      min-height: 88px;
+      padding: 0.75rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      font-size: 0.95rem;
+      resize: vertical;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+      margin-top: 1rem;
+    }
+    .panel h2 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 0 0 0.5rem; }
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.82rem;
+      color: #c8d4e0;
+    }
+    .status { font-size: 0.85rem; padding: 0.5rem 0.75rem; border-radius: 8px; margin-bottom: 1rem; }
+    .status.ok { background: rgba(62, 207, 142, 0.12); border: 1px solid rgba(62, 207, 142, 0.35); }
+    .status.bad { background: rgba(240, 180, 41, 0.12); border: 1px solid rgba(240, 180, 41, 0.35); }
+    .answer { font-size: 1.05rem; color: var(--text); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>rag_new</h1>
+    <p class="sub">Hybrid retrieval (dense + BM25 → RRF) · ingest <code>doc.md</code> · Q&amp;A</p>
+
+    <div id="healthBar" class="status bad">Checking server…</div>
+
+    <div class="row">
+      <button type="button" id="btnIngest" class="secondary">Ingest knowledge (doc.md)</button>
+      <button type="button" id="btnHealth" class="secondary">Refresh status</button>
+    </div>
+
+    <textarea id="question" placeholder="输入问题…"></textarea>
+    <div class="row" style="margin-top: 0.75rem;">
+      <button type="button" id="btnAsk">Ask (retrieve + answer)</button>
+    </div>
+
+    <div class="panel">
+      <h2>Answer</h2>
+      <div id="answer" class="answer">—</div>
+    </div>
+    <div class="panel">
+      <h2>Message</h2>
+      <pre id="msg">—</pre>
+    </div>
+    <div class="panel">
+      <h2>Retrieved context</h2>
+      <pre id="ctx">—</pre>
+    </div>
+    <div class="panel">
+      <h2>RAG trace (JSON)</h2>
+      <pre id="trace">—</pre>
+    </div>
+  </div>
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    async function refreshHealth() {
+      const el = $("healthBar");
+      try {
+        const r = await fetch("/health");
+        const j = await r.json();
+        if (j.milvus_ok) {
+          el.className = "status ok";
+          el.textContent = "Milvus OK · " + j.milvus_uri + " · collection: " + j.collection;
+        } else {
+          el.className = "status bad";
+          el.textContent = "Milvus unavailable. Install Docker Desktop, run `docker compose up -d` in rag_new, then refresh. URI: "
+            + j.milvus_uri + " — " + (j.milvus_error || "error");
+        }
+      } catch (e) {
+        el.className = "status bad";
+        el.textContent = "Cannot reach API: " + e;
+      }
+    }
+
+    $("btnHealth").onclick = refreshHealth;
+    $("btnIngest").onclick = async () => {
+      const btn = $("btnIngest");
+      btn.disabled = true;
+      $("msg").textContent = "Ingesting…";
+      try {
+        const r = await fetch("/ingest/doc", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+        const j = await r.json();
+        $("msg").textContent = r.ok ? JSON.stringify(j, null, 2) : (j.detail || JSON.stringify(j));
+        await refreshHealth();
+      } catch (e) {
+        $("msg").textContent = String(e);
+      }
+      btn.disabled = false;
+    };
+
+    $("btnAsk").onclick = async () => {
+      const q = ($("question").value || "").trim();
+      if (!q) {
+        $("msg").textContent = "Enter a question.";
+        return;
+      }
+      const btn = $("btnAsk");
+      btn.disabled = true;
+      $("answer").textContent = "…";
+      $("msg").textContent = "Running RAG…";
+      try {
+        const r = await fetch("/rag/complete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: q, top_k: 5 }),
+        });
+        const j = await r.json();
+        if (!r.ok) {
+          $("answer").textContent = "—";
+          $("msg").textContent = typeof j.detail === "string" ? j.detail : JSON.stringify(j, null, 2);
+          $("ctx").textContent = "—";
+          $("trace").textContent = "—";
+        } else {
+          $("answer").textContent = j.answer || "—";
+          $("msg").textContent = j.message || "—";
+          $("ctx").textContent = j.context || "—";
+          $("trace").textContent = JSON.stringify(j.rag_trace || {}, null, 2);
+        }
+      } catch (e) {
+        $("answer").textContent = "—";
+        $("msg").textContent = String(e);
+      }
+      btn.disabled = false;
+    };
+
+    refreshHealth();
+  </script>
+</body>
+</html>
